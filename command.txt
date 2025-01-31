@@ -1,0 +1,20 @@
+cd ~/PX4-Autopilot
+
+make px4_sitl gz_x500
+
+ros2 launch mavros px4.launch fcu_url:=udp://:14540@127.0.0.1:14557
+
+ros2 service call /mavros/set_mode mavros_msgs/srv/SetMode "{base_mode: 0, custom_mode: 'OFFBOARD'}"
+
+ros2 service call /mavros/cmd/arming mavros_msgs/srv/CommandBool "{value: true}"
+
+gz sim ~/PX4-Autopilot/Tools/simulation/gz/worlds/default.sdf
+
+./QGroundControl.AppImage
+
+
+
+
+
+
+ros2 service call /mavros/set_mode mavros_msgs/srv/SetMode "{base_mode: 0, custom_mode: 'AUTO.LAND'}"
