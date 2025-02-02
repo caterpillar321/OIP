@@ -1,9 +1,11 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped, PoseStamped
 from mavros_msgs.srv import SetMode, CommandBool, CommandTOL
 import time
+import math 
+from rclpy.qos import qos_profile_sensor_data
 
 class Drone(Node):
     def __init__(self):
@@ -12,11 +14,19 @@ class Drone(Node):
         self.pitch = 0
         self.yaw = 0
         self.ck = 0
+        self.count = 0
 
         # ROS2 퍼블리셔 생성
         self.velocity_publisher = self.create_publisher(
             TwistStamped, '/mavros/setpoint_velocity/cmd_vel', 10)
         self.get_logger().info("Velocity publisher initialized.")
+
+        self.pose_subscriber = self.create_subscription(
+            PoseStamped,
+            '/mavros/local_position/pose',
+            self.pose_callback,
+            qos_profile_sensor_data
+        )
 
         self.set_mode_client = self.create_client(SetMode, '/mavros/set_mode')
         self.arming_client = self.create_client(CommandBool, '/mavros/cmd/arming')
@@ -29,14 +39,30 @@ class Drone(Node):
         while not self.land_client.wait_for_service(timeout_sec=3.0):
             self.get_logger().info('Waiting for /mavros/cmd/land service...')
 
-    def move_drone(self, x, y, z, yaw):
-        self.get_logger().info(f"Moving Drone: x={x}, y={y}, z={z}, yaw={yaw}")
+    def pose_callback(self, msg):
+        q = msg.pose.orientation
+    
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        self.yaw = yaw
+        
+        self.count += 1
+        if self.count % 50 == 0 :
+            self.get_logger().info(f"Calculated yaw: {yaw} radians")
+    
+    def move_drone(self, x, y, z, yaw_rate):
+        # body frame -> 월드(고정) 좌표계 변환
+        x_global = x * math.cos(self.yaw) - y * math.sin(self.yaw)  # modified
+        y_global = x * math.sin(self.yaw) + y * math.cos(self.yaw)  # modified
+
+        #self.get_logger().info(f"Moving Drone: x_global={x_global}, y_global={y_global}, z={z}, yaw_rate={yaw_rate}")
         velocity_msg = TwistStamped()
         velocity_msg.header.stamp = self.get_clock().now().to_msg()
-        velocity_msg.twist.linear.x = x
-        velocity_msg.twist.linear.y = y
+        velocity_msg.twist.linear.x = x_global  # modified
+        velocity_msg.twist.linear.y = y_global  # modified
         velocity_msg.twist.linear.z = z
-        velocity_msg.twist.angular.z = yaw
+        velocity_msg.twist.angular.z = yaw_rate
         self.ck += 1
 
         self.velocity_publisher.publish(velocity_msg)
@@ -44,7 +70,7 @@ class Drone(Node):
         if self.ck == 5:
             self.enable_offboard_mode()
             self.arm_drone()
-
+    
     def operate(self, data):
         x = data.get('x', 0.0)
         y = data.get('y', 0.0)
