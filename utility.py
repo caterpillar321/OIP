@@ -5,6 +5,8 @@ import netifaces
 import socket
 import time
 import select
+import rclpy
+from rclpy.node import Node
 
 def kill_process_on_port(port):
     # Find the process ID (PID) using lsof
