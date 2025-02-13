@@ -78,3 +78,18 @@ class StreamCam(Node):
         self.client_socket.close()
         self.server_socket.close()
 
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    stream_cam = StreamCam()
+    try:
+        stream_cam.start_server()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stream_cam.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
